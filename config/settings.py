@@ -12,7 +12,7 @@ receiver_config = {'host': '0.0.0.0', 'port': 25}
 
 handlers = ['smtp_handler.main']
 
-router_defaults = {'host': '\*\\.mit\\.edu'}
+router_defaults = {'host': '\*\\.yiqing-squadbox\\.net'}
 
 template_config = {'dir': 'smtp_handler', 'module': 'templates'}
 

@@ -13,7 +13,9 @@ middleware here, or combine a Django application with an application of another
 framework.
 
 """
-import os
+import os, sys
+#sys.path.append('/home/ubuntu/squadbox')
+sys.path.append('/home/ubuntu/squadbox-env/lib/python2.7/site-packages')
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "http_handler.settings")
 

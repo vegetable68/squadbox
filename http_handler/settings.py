@@ -7,9 +7,9 @@ import django
 DJANGO_ROOT = os.path.dirname(os.path.realpath(django.__file__))
 SITE_ROOT = os.path.dirname(os.path.realpath(__file__))
 
-_ENV_FILE_PATH = '/opt/murmur/env'
-_DEBUG_FILE_PATH = '/opt/murmur/debug'
-_WEBSITE_FILE_PATH = '/opt/murmur/website'
+_ENV_FILE_PATH = '/opt/squadbox/env'
+_DEBUG_FILE_PATH = '/opt/squadbox/debug'
+_WEBSITE_FILE_PATH = '/opt/squadbox/website'
 
 def _get_env():
     f = open(_ENV_FILE_PATH)
@@ -50,18 +50,16 @@ def _get_website():
 WEBSITE = _get_website()
 
 try:
-    execfile(SITE_ROOT + '/../private.py')
+    execfile(SITE_ROOT + '/private.py')
 except IOError:
     print "Unable to open configuration file!"
+MYURL = 'yiqing-squadbox.net'
 
 if ENV == 'prod':
-    if WEBSITE == 'murmur':
-        BASE_URL = 'murmur.csail.mit.edu'
-    else:
-        BASE_URL = 'squadbox.csail.mit.edu'
+    BASE_URL = MYURL
     MYSQL = MYSQL_PROD
 elif ENV == 'staging':
-    BASE_URL = 'murmur-dev.csail.mit.edu'
+    BASE_URL = 'dev.' + MYURL
     MYSQL = MYSQL_DEV
 else:
     BASE_URL = 'localhost:8000'
@@ -257,11 +255,11 @@ LOGGING = {
         },
 
         # comment this out if you want to see DB queries in logs
-        'django.db.backends': {
-            'handlers': None, 
-            'propagate': False,
-            'level':'DEBUG',
-        },
+#        'django.db.backends': {
+#            'handlers': None, 
+#            'propagate': False,
+#            'level':'DEBUG',
+#        },
     }
 }
 

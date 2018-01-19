@@ -1,4 +1,5 @@
 import base64, email, hashlib, json, logging, random, re, requests, sys, time
+from nltk.tokenize import sent_tokenize
 
 from bleach import clean
 from cgi import escape
@@ -1821,11 +1822,42 @@ def get_or_generate_filter_hash(user, group_name, push=True):
 
     return res
 
+def get_sentence_score(sentences):
+    spans = []
+    for sent in sentences:
+        path = ' https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze?key=%s' % PERSPECTIVE_KEY
+    
+        request = {
+            'comment' : {'text' : sent },
+            'requestedAttributes' : {
+                                    'TOXICITY' : {},
+                                    },
+            'doNotStore' : True, # don't store text of msg
+        }
+    
+        response = requests.post(path, json=request)
+        if response.status_code == 200:
+    
+            data = json.loads(response.text)
+            scores_simplified = {}
+            attribute_scores = data['attributeScores']
+            # only one attribute, toxicity    
+            for attr, data in attribute_scores.iteritems():
+                summary = data['summaryScore']
+                prob = summary['value']
+                spans.append((sent, prob))
+        else:
+            spans.append((sent, None))
+    return spans
+
+
+
 def call_perspective_api(text):
     res = { 'status' : False }
 
     # API currently only accepts plaintext  
     text = html2text(text)
+    sentences = sent_tokenize(text)
 
     path = ' https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze?key=%s' % PERSPECTIVE_KEY
 
@@ -1858,22 +1890,8 @@ def call_perspective_api(text):
             prob = summary['value']
             scores_simplified[attr] = prob
 
-            spans = data.get('spanScores')
-            if spans:
-                span_list = []
-                for s in spans:
-                    span_data = {
-                        'start' : s['begin'],
-                        'end' : s['end'],
-                        'score' : s['score']['value'],
-                    }
-
-                    span_list.append(span_data)
-
-                spans_simplified[attr] = span_list
-
         res['scores'] = scores_simplified
-        res['spans'] = spans_simplified
+        res['spans'] = get_sentence_score(sentences)
         res['status'] = True
 
     return res

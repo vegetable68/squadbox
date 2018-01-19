@@ -32,9 +32,15 @@
 		</div>
 		<hr>
 		<div>			
-		{% autoescape off %}
-		{{ thread.post.text }}
-		{% endautoescape %}
+                
+	        {% for text, score in thread.post.perspective_data.spans%}
+                       {% if score < 0.5 %} 
+	   	           <span style="background-color: gray; color: gray">{% autoescape off %}{{text}}{% endautoescape %}</span> <br>
+                       {% else %}
+	   	           <span class="strong-gray">{% autoescape off %}{{text}}{% endautoescape %}</span><br>
+                       {% endif %}
+	        {% endfor %}
+                
 		</div>
 		<BR>
 		{% if thread.post.attachments %}
