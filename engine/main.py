@@ -1,5 +1,6 @@
 import base64, email, hashlib, json, logging, random, re, requests, sys, time
 from nltk.tokenize import sent_tokenize
+import numpy as np
 from bs4 import BeautifulSoup
 
 from bleach import clean
@@ -17,7 +18,7 @@ from constants import *
 from engine.constants import extract_hash_tags, ALLOWED_MESSAGE_STATUSES
 from gmail_setup.api import update_gmail_filter, untrash_message
 from gmail_setup.views import build_services
-from http_handler.settings import BASE_URL, WEBSITE, AWS_STORAGE_BUCKET_NAME, PERSPECTIVE_KEY, TOXIC_THREASHOLD
+from http_handler.settings import BASE_URL, WEBSITE, AWS_STORAGE_BUCKET_NAME, PERSPECTIVE_KEY, TOXIC_THRESHOLD
 from s3_storage import upload_attachments, download_attachments, download_message
 from schema.models import *
 from smtp_handler.utils import *
@@ -1823,14 +1824,15 @@ def get_or_generate_filter_hash(user, group_name, push=True):
 
     return res
 
-def get_sentence_score(text, sentences):
+def get_sentence_score(text, sentences,\
+    display_highest=False, display_threshold=False, \
+    reveal_context=False, reveal_by_order=False):
     spans = []
     last_one = len(sentences)
     max_level = len(sentences) + 1
     max_toxicity = 0
     for ind, sent in enumerate(sentences):
         path = ' https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze?key=%s' % PERSPECTIVE_KEY
-    
         request = {
             'comment' : {'text' : sent },
             'requestedAttributes' : {
@@ -1864,28 +1866,33 @@ def get_sentence_score(text, sentences):
         else:
             spans.append({'text': sent_content, 'hidden_text': ''.join(['!' if not(s == '\n') else '\n' for s in sent_content]), 'score': None, 'id': sent_id, 'level': max_level})
     total_spans = len(spans)
+    if display_threshold:
+       max_toxicity = TOXIC_THRESHOLD
     for ind, span in enumerate(spans):
-        if span['score'] >= max_toxicity: #TOXIC_THREASHOLD:
+        if span['score'] >= max_toxicity:
            span['level'] = 0 
-           cnt = ind - 1
-           while cnt >= 0:
-                 spans[cnt]['level'] = min(spans[cnt]['level'], ind - cnt)
-                 cnt -= 1
-           cnt = ind + 1
-           while cnt < total_spans:
-                 spans[cnt]['level'] = min(spans[cnt]['level'], cnt - ind)
-                 cnt += 1
+           if reveal_context:
+              cnt = ind - 1
+              while cnt >= 0:
+                    spans[cnt]['level'] = min(spans[cnt]['level'], ind - cnt)
+                    cnt -= 1
+              cnt = ind + 1
+              while cnt < total_spans:
+                    spans[cnt]['level'] = min(spans[cnt]['level'], cnt - ind)
+                    cnt += 1
+    if reveal_by_order:
+       current_level = 0
+       scores = [s['score'] for s in spans]
+       sorted_scores = np.argsort(scores)[::-1]
+       for ind in sorted_scores:
+           if scores[ind] < max_toxicity:
+              current_level += 1
+              spans[ind]['level'] = current_level
     for span in spans:
         span['id'] += '-level%d'%span['level']
     return spans
 
-
-
-def call_perspective_api(text):
-    res = { 'status' : False }
-
-    # API currently only accepts plaintext  
-    text = html2text(text)
+def clear(text):
     cleared_text = ""
     consecutive_newlines = False
     for char in text:
@@ -1898,7 +1905,14 @@ def call_perspective_api(text):
         else:
            consecutive_newlines = False
            cleared_text += char
-    text = cleared_text
+    return(cleared_text)
+
+
+def call_perspective_api(text):
+    res = { 'status' : False }
+
+    # API currently only accepts plaintext  
+    text = clear(html2text(text))
     sentences = sent_tokenize(text)
 
     path = ' https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze?key=%s' % PERSPECTIVE_KEY
@@ -1933,7 +1947,7 @@ def call_perspective_api(text):
             scores_simplified[attr] = prob
 
         res['scores'] = scores_simplified
-        res['spans'] = get_sentence_score(text, sentences)
+        res['spans'] = get_sentence_score(text, sentences, display_threshold=True, reveal_context=True)
         res['status'] = True
     res['text'] = text
 

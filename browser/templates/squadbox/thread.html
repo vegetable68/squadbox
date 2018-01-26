@@ -8,7 +8,7 @@
 	<div hidden id='sender-email'>{{ thread.post.from }}</div>
 		<div>
 			<div>
-				<h3><span id="post-subject">{{ thread.post.subject }}</span></h3>
+				<h3><span id="post-subject">Email Subject: {{ thread.post.subject }}</span></h3>
 				<span class="strong">From: </span> 
 				<span class="strong-gray" id="post-from">{{ thread.post.from }} </span>
 				{% if thread.post.verified %}
