@@ -28,16 +28,21 @@
 				{% for k,v in thread.post.perspective_data.scores.items %}
 					<span class="strong-gray">{{k|lower}}</span>: {{v|floatformat:2}} <br>
 				{% endfor %}
+                                <br>
+                                <span id='explanation'>The following is the most toxic content scored using <a href="https://www.perspectiveapi.com">Perspective API</a>, if you cannot decide if the email contains harassment or not, please click button to view more context.</span>     
 			</div>
 		</div>
-		<hr>
+                <hr>
 		<div>			
-                
-	        {% for text, score in thread.post.perspective_data.spans%}
-                       {% if score < 0.5 %} 
-	   	           <span style="background-color: gray; color: gray">{% autoescape off %}{{text}}{% endautoescape %}</span> <br>
+                <br>
+	        {% for span in thread.post.perspective_data.spans%}
+                       {% if span.level > 0 %} 
+	   	           <span id="hidden-{{span.id}}" style="background-color:gray; color:gray; display: inline">{% autoescape off %}{{span.hidden_text|linebreaksbr}}{% endautoescape %}</span>
+	   	           <span id="show-{{span.id}}" style="color:gray; display: none">{% autoescape off %}{{span.text|linebreaksbr}}{% endautoescape %}</span>
                        {% else %}
-	   	           <span class="strong-gray">{% autoescape off %}{{text}}{% endautoescape %}</span><br>
+                       
+	   	           <span id="show-{{span.id}}" style="color:gray; display: inline">{% autoescape off %}{{span.text|linebreaksbr}}{% endautoescape %}</span>
+                       
                        {% endif %}
 	        {% endfor %}
                 
@@ -59,9 +64,13 @@
 	<br>
 	<a href="" data-toggle="modal" data-target="#mod-rules-modal"><i>review squad owner's preferences</i></a><br><br>
 
+        <button type="button" id="btn-show-more">Show me more</button>
+        <br><br>
+
 	<label class="radio-inline"><input type="radio" id="approve-radio" name="approve-reject" value="approve">Approve</label>
 	<label class="radio-inline"><input type="radio" id="reject-radio" name="approve-reject" value="reject">Reject</label>
 	<br><br>
+
 
 
 	<div id="ifApprove" style='display:none'>

@@ -9,8 +9,8 @@ $(document).ready(function() {
         post_id = $.trim($('#post-id').text()),
         approve_reject = $('input[type=radio][name=approve-reject]'),
         approveDiv = $('#ifApprove')[0],
-        rejectDiv = $('#ifReject')[0];
-
+        rejectDiv = $('#ifReject')[0],
+        show_btn = $('#btn-show-more');
     $('[data-toggle="tooltip"]').tooltip();
 
     approve_reject.change(function() {
@@ -21,6 +21,32 @@ $(document).ready(function() {
             approveDiv.style.display = 'none';
             rejectDiv.style.display = 'inline';
         }
+    });
+    
+    show_btn.click(function() {
+        var current_level = -1;
+        $('[id^=show-text]').each(function() {
+          if( $(this).css('display') == 'none') {
+            var level = this.id.split("level")[1];
+            if (level < current_level || current_level == -1) {
+               current_level = parseInt(level);
+            } 
+          }
+        });
+        current_level = current_level;
+        $('[id^=hidden-text]').each(function() {
+          var level = this.id.split("level")[1];
+          if (level <= current_level) {
+             $(this).css('display', 'none')
+          } 
+        });
+        $('[id^=show-text]').each(function() {
+          var level = this.id.split("level")[1];
+          if (level <= current_level) {
+             $(this).css('display', 'inline')
+          } 
+        });
+
     });
 
     submit_btn.click(function() {

@@ -1,5 +1,6 @@
 import base64, email, hashlib, json, logging, random, re, requests, sys, time
 from nltk.tokenize import sent_tokenize
+from bs4 import BeautifulSoup
 
 from bleach import clean
 from cgi import escape
@@ -7,7 +8,7 @@ from datetime import timedelta
 from django.utils.timezone import utc
 from django.db.models import Q
 from email.utils import parseaddr
-from html2text import html2text
+import html2text as h2t 
 from lamson.mail import MailResponse
 from pytz import utc
 
@@ -16,7 +17,7 @@ from constants import *
 from engine.constants import extract_hash_tags, ALLOWED_MESSAGE_STATUSES
 from gmail_setup.api import update_gmail_filter, untrash_message
 from gmail_setup.views import build_services
-from http_handler.settings import BASE_URL, WEBSITE, AWS_STORAGE_BUCKET_NAME, PERSPECTIVE_KEY
+from http_handler.settings import BASE_URL, WEBSITE, AWS_STORAGE_BUCKET_NAME, PERSPECTIVE_KEY, TOXIC_THREASHOLD
 from s3_storage import upload_attachments, download_attachments, download_message
 from schema.models import *
 from smtp_handler.utils import *
@@ -1628,7 +1629,7 @@ def update_post_status(user, group_name, post_id, new_status, explanation=None, 
                     html_prefix = "<p><b>Moderator explanation for rejection</b>: %s </p><b>Message text</b>:<br>" % p.mod_explanation
 
                 message_text = {'html' : html_prefix + p.post}
-                message_text['plain'] = html2text(html_prefix + p.post)
+                message_text['plain'] = h2t.html2text(html_prefix + p.post)
                 mail.Html = get_new_body(message_text, html_blurb, 'html')
                 mail.Body = get_new_body(message_text, plain_blurb, 'plain')
 
@@ -1715,7 +1716,7 @@ def fix_posts(post_queryset):
                     'from_name' : p.poster_name,
                     'to': p.group.name, 
                     'subject': escape(p.subject),
-                    'text': html2text(p.post),
+                    'text': h2t.html2text(p.post),
                     'thread_id' : p.thread.id, 
                     'timestamp': p.timestamp,
                     'verified': p.verified_sender,
@@ -1822,9 +1823,12 @@ def get_or_generate_filter_hash(user, group_name, push=True):
 
     return res
 
-def get_sentence_score(sentences):
+def get_sentence_score(text, sentences):
     spans = []
-    for sent in sentences:
+    last_one = len(sentences)
+    max_level = len(sentences) + 1
+    max_toxicity = 0
+    for ind, sent in enumerate(sentences):
         path = ' https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze?key=%s' % PERSPECTIVE_KEY
     
         request = {
@@ -1836,6 +1840,16 @@ def get_sentence_score(sentences):
         }
     
         response = requests.post(path, json=request)
+        sent_content = ""
+        sent_len = len(sent)
+        while not(text[:sent_len] == sent):
+              sent_content += text[0]
+              text = text[1:]
+        sent_content += sent
+        text = text[sent_len:]
+        sent_id = 'text-id%d'%(ind)
+        if ind == last_one:
+           sent_content += text
         if response.status_code == 200:
     
             data = json.loads(response.text)
@@ -1845,9 +1859,24 @@ def get_sentence_score(sentences):
             for attr, data in attribute_scores.iteritems():
                 summary = data['summaryScore']
                 prob = summary['value']
-                spans.append((sent, prob))
+                spans.append({'text': sent_content, 'hidden_text': ''.join(['!' if not(s == '\n') else '\n' for s in sent_content]), 'score': prob, 'id': sent_id, 'level': max_level})
+            max_toxicity = max(max_toxicity, prob)
         else:
-            spans.append((sent, None))
+            spans.append({'text': sent_content, 'hidden_text': ''.join(['!' if not(s == '\n') else '\n' for s in sent_content]), 'score': None, 'id': sent_id, 'level': max_level})
+    total_spans = len(spans)
+    for ind, span in enumerate(spans):
+        if span['score'] >= max_toxicity: #TOXIC_THREASHOLD:
+           span['level'] = 0 
+           cnt = ind - 1
+           while cnt >= 0:
+                 spans[cnt]['level'] = min(spans[cnt]['level'], ind - cnt)
+                 cnt -= 1
+           cnt = ind + 1
+           while cnt < total_spans:
+                 spans[cnt]['level'] = min(spans[cnt]['level'], cnt - ind)
+                 cnt += 1
+    for span in spans:
+        span['id'] += '-level%d'%span['level']
     return spans
 
 
@@ -1857,6 +1886,19 @@ def call_perspective_api(text):
 
     # API currently only accepts plaintext  
     text = html2text(text)
+    cleared_text = ""
+    consecutive_newlines = False
+    for char in text:
+        if char == '\n':
+           if not(consecutive_newlines):
+              consecutive_newlines = True
+              cleared_text += ' ' 
+           else:
+              cleared_text += char
+        else:
+           consecutive_newlines = False
+           cleared_text += char
+    text = cleared_text
     sentences = sent_tokenize(text)
 
     path = ' https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze?key=%s' % PERSPECTIVE_KEY
@@ -1891,8 +1933,9 @@ def call_perspective_api(text):
             scores_simplified[attr] = prob
 
         res['scores'] = scores_simplified
-        res['spans'] = get_sentence_score(sentences)
+        res['spans'] = get_sentence_score(text, sentences)
         res['status'] = True
+    res['text'] = text
 
     return res
 
